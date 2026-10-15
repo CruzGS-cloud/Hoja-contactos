@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hoja de contactos</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: mesa de luz — panel de controles estrecho a la izquierda, la hoja a la derecha; se apilan en móvil */
+:root{
+  --bg:#ebe9e5; --panel:#f8f7f4; --fg:#1d1b19; --muted:#6c6762; --line:#d5d1cb; --accent:#c12a1e; --accent-fg:#fff;
+  --f-display:"Instrument Serif", Georgia, "Times New Roman", serif;
+  --f-body:"Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121010; --panel:#1b1817; --fg:#ece6e1; --muted:#9b928b; --line:#2f2a27; --accent:#ff5b48; --accent-fg:#1a0c0a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121010; --panel:#1b1817; --fg:#ece6e1; --muted:#9b928b; --line:#2f2a27; --accent:#ff5b48; --accent-fg:#1a0c0a; color-scheme:dark}
+
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;margin-bottom:22px}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(2rem,4.5vw,2.8rem);line-height:1.05;margin:0;text-wrap:balance}
+h1 em{color:var(--accent)}
+header p{margin:0;color:var(--muted);max-width:60ch}
+.grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:18px}
+.field{display:flex;flex-direction:column;gap:7px}
+.lbl{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{padding:8px 6px;text-align:center;cursor:pointer;font-size:13.5px;line-height:1.25}
+.seg label small{display:block;color:var(--muted);font-family:var(--f-mono);font-size:10.5px}
+.seg label+input+label,.seg input+label~label{border-left:1px solid var(--line)}
+.seg input:checked+label{background:var(--fg);color:var(--bg)}
+.seg input:checked+label small{color:var(--bg);opacity:.75}
+.seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:-2px}
+
+.btn{font:inherit;font-size:14px;font-weight:500;border-radius:7px;padding:9px 12px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn:focus-visible,input[type=text]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row .btn.primary{flex:1}
+#files{display:none}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer}
+.check input{margin-top:3px;accent-color:var(--accent)}
+.check small{display:block;color:var(--muted);font-size:12.5px}
+input[type=text]{font:inherit;font-family:var(--f-mono);font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--fg);width:100%;box-sizing:border-box}
+.status{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.stage{display:flex;flex-direction:column;gap:10px;min-width:0}
+.sheetbox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:clamp(10px,2.5vw,28px);display:flex;justify-content:center}
+[hidden]{display:none!important}
+#out,#sheet{display:block;max-width:100%;max-height:82vh;width:auto;height:auto;cursor:crosshair;box-shadow:0 1px 2px rgba(0,0,0,.18),0 8px 28px rgba(0,0,0,.14)}
+.hint{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.hint b{color:var(--fg);font-weight:600}
+.dot{display:inline-block;width:9px;height:9px;border:2px solid var(--accent);border-radius:2px;vertical-align:-1px;margin-right:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Hoja de <em>contactos</em></h1>
+    <p>Sube tus fotos y se colocan en tiras de película, como en un contacto en papel. Sin fotos, sirve como plantilla vacía.</p>
+  </header>
+
+  <div class="grid">
+    <aside class="panel">
+      <div class="field">
+        <span class="lbl">Película</span>
+        <div class="seg" role="radiogroup" aria-label="Formato de película">
+          <input type="radio" name="fmt" id="fmt120" value="120" checked><label for="fmt120">Medio formato<small>6×6 · 12 fotos</small></label>
+          <input type="radio" name="fmt" id="fmt135" value="135"><label for="fmt135">35 mm<small>24×36 · 36 fotos</small></label>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lbl">Fotos</span>
+        <div class="row">
+          <button class="btn primary" id="add" type="button">Añadir fotos</button>
+          <button class="btn" id="clear" type="button">Vaciar</button>
+        </div>
+        <input type="file" id="files" accept="image/*" multiple>
+        <span class="status" id="status">0 de 12 fotogramas ocupados</span>
+      </div>
+
+      <div class="field">
+        <span class="lbl">Positivado</span>
+        <label class="check"><input type="checkbox" id="bw" checked><span>Blanco y negro<small>Convierte las fotos a escala de grises</small></span></label>
+        <label class="check"><input type="checkbox" id="craft" checked><span>Tiras torcidas<small>Leve desalineación, como colocadas a mano</small></span></label>
+        <label class="check" id="rotWrap"><input type="checkbox" id="rot" checked><span>Girar fotos verticales<small>Las encaja tumbadas en el fotograma, como en la película</small></span></label>
+        <label class="check"><input type="checkbox" id="warm"><span>Papel baritado cálido<small>Blancos y negros con tono algo cálido</small></span></label>
+      </div>
+
+      <div class="field">
+        <label class="lbl" for="caption">Rótulo al pie</label>
+        <input type="text" id="caption" value="ROLLO 01 · 400 ISO · OCT 2026" maxlength="60">
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="sheetbox"><img id="out" alt="Hoja de contactos generada"></div>
+      <div class="hint">
+        <span><span class="dot"></span><b>Clic en un fotograma</b> para marcarlo con lápiz graso.</span>
+        <span><b>Para guardarla:</b> clic derecho sobre la hoja › Guardar imagen (en móvil, mantén pulsado).</span>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const S = 300 / 25.4; // px por mm a 300 ppp
+const FORMATS = {
+  '120': {strips:3, per:4, filmW:61.5, fw:56, fh:56, pitch:59.5, vertical:true,  sprockets:false, name:'6×6'},
+  '135': {strips:6, per:6, filmW:35,   fw:36, fh:24, pitch:38,   vertical:false, sprockets:true,  name:'35 mm'}
+};
+const LEAD=3, GAP=3.2, PAD=6, MARGIN=14, BOTTOM=22;
+
+const state = { fmt:'120', photos:[], marked:new Set(), frames:[] };
+const $ = id => document.getElementById(id);
+const out = $('out');
+const canvas = document.createElement('canvas');
+canvas.id = 'sheet'; canvas.hidden = true;
+const ctx = canvas.getContext('2d');
+let queued = false;
+
+function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+function rrect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+
+function drawCover(src, w, h){
+  const sr = src.width/src.height, br = w/h;
+  let sw=src.width, sh=src.height, sx=0, sy=0;
+  if (sr > br){ sw = sh*br; sx = (src.width-sw)/2; } else { sh = sw/br; sy = (src.height-sh)/2; }
+  ctx.drawImage(src, sx, sy, sw, sh, -w/2, -h/2, w, h);
+}
+
+function render(){
+  queued = false;
+  const F = FORMATS[state.fmt];
+  const warm = $('warm').checked, craft = $('craft').checked, bw = $('bw').checked, rot = $('rot').checked;
+  const stripLen = LEAD*2 + F.per*F.pitch;
+  const across = F.strips*F.filmW + (F.strips-1)*GAP;
+  const cw = F.vertical ? across : stripLen, ch = F.vertical ? stripLen : across;
+  const bW = cw + PAD*2, bH = ch + PAD*2;
+  const sW = bW + MARGIN*2, sH = bH + MARGIN + BOTTOM;
+  canvas.width = Math.round(sW*S); canvas.height = Math.round(sH*S);
+
+  const paper = warm ? '#f4eee2' : '#f7f7f4';
+  const black = warm ? '#0e0b08' : '#070707';
+  const base  = warm ? '#1d1914' : '#191919';
+  const edge  = warm ? '#d8cfbf' : '#d6d6d2';
+
+  ctx.setTransform(S,0,0,S,0,0);
+  ctx.fillStyle = paper; ctx.fillRect(0,0,sW,sH);
+  ctx.fillStyle = black; ctx.fillRect(MARGIN, MARGIN, bW, bH);
+
+  state.frames = [];
+  const marks = [];
+  for (let k=0; k<F.strips; k++){
+    const r = rng(1234 + k*97 + (F.vertical?0:500));
+    ctx.save();
+    let x0, y0, cx, cy;
+    if (F.vertical){ x0 = MARGIN+PAD + k*(F.filmW+GAP); y0 = MARGIN+PAD; cx = x0+F.filmW/2; cy = y0+stripLen/2; }
+    else { x0 = MARGIN+PAD; y0 = MARGIN+PAD + k*(F.filmW+GAP); cx = x0+stripLen/2; cy = y0+F.filmW/2; }
+    if (craft){
+      const a = (r()-0.5) * 1.1 * Math.PI/180, dx = (r()-0.5)*1.4, dy = (r()-0.5)*1.4;
+      ctx.translate(cx+dx, cy+dy); ctx.rotate(a); ctx.translate(-cx, -cy);
+    }
+    if (F.vertical){ ctx.translate(x0+F.filmW, y0); ctx.rotate(Math.PI/2); }
+    else ctx.translate(x0, y0);
+
+    // base de la película
+    ctx.fillStyle = base; ctx.fillRect(0,0,stripLen,F.filmW);
+
+    if (F.sprockets){
+      ctx.fillStyle = black;
+      for (let p=1.3; p+1.98<stripLen; p+=4.75){
+        rrect(ctx,p,2.01,1.98,2.79,0.45); ctx.fill();
+        rrect(ctx,p,F.filmW-4.8,1.98,2.79,0.45); ctx.fill();
+      }
+    }
+
+    for (let i=0; i<F.per; i++){
+      const idx = k*F.per + i;
+      const fx = LEAD + i*F.pitch + (F.pitch-F.fw)/2, fy = (F.filmW-F.fh)/2;
+      state.frames.push({m: ctx.getTransform(), x:fx, y:fy, w:F.fw, h:F.fh});
+
+      ctx.save();
+      rrect(ctx, fx, fy, F.fw, F.fh, 0.6); ctx.clip();
+      ctx.translate(fx+F.fw/2, fy+F.fh/2);
+      if (F.vertical) ctx.rotate(-Math.PI/2);
+      const bw_ = F.vertical ? F.fh : F.fw, bh_ = F.vertical ? F.fw : F.fh; // caja en orientación de la hoja
+      const ph = state.photos[idx];
+      if (ph){
+        const src = bw ? ph.gray : ph.color;
+        const portrait = src.height > src.width;
+        if (rot && bw_ > bh_ && portrait){ ctx.rotate(-Math.PI/2); drawCover(src, bh_, bw_); }
+        else drawCover(src, bw_, bh_);
+      } else {
+        const g = ctx.createRadialGradient(0,0,2,0,0,Math.max(bw_,bh_)*0.7);
+        g.addColorStop(0, warm?'#8a8274':'#868686'); g.addColorStop(1, warm?'#5c564c':'#5a5a5a');
+        ctx.fillStyle = g; ctx.fillRect(-bw_/2,-bh_/2,bw_,bh_);
+        ctx.fillStyle = 'rgba(255,255,255,.22)';
+        ctx.font = `500 ${Math.min(bw_,bh_)*0.32}px "IBM Plex Mono", monospace`;
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(String(idx+1), 0, 0);
+      }
+      ctx.restore();
+
+      // números de borde
+      ctx.fillStyle = edge; ctx.textBaseline='alphabetic'; ctx.textAlign='left';
+      if (F.sprockets){
+        ctx.font = '500 1.45px "IBM Plex Mono", monospace';
+        const n = idx % 36 + 1;
+        ctx.fillText(String(n), fx+1.5, F.filmW-0.5);
+        ctx.fillText('▸'+n+'A', fx+F.fw/2+3, F.filmW-0.5);
+      } else {
+        ctx.font = '500 1.9px "IBM Plex Mono", monospace';
+        ctx.fillText(String(idx+1), fx+2, F.filmW-0.5);
+      }
+      if (state.marked.has(idx)) marks.push({m: ctx.getTransform(), fx, fy, w:F.fw, h:F.fh, idx});
+    }
+    if (!F.sprockets){
+      ctx.font = '500 1.7px "IBM Plex Mono", monospace'; ctx.fillStyle = edge;
+      ctx.fillText('SAFETY FILM  ' + (k*F.per+1) + '–' + (k*F.per+F.per), LEAD+F.pitch*1.4, 1.95);
+    }
+    ctx.restore();
+  }
+
+  // lápiz graso
+  for (const mk of marks){
+    ctx.save(); ctx.setTransform(mk.m);
+    const r = rng(77 + mk.idx*13);
+    ctx.strokeStyle = 'rgba(200,34,24,.86)'; ctx.lineCap='round'; ctx.lineJoin='round';
+    for (let pass=0; pass<2; pass++){
+      ctx.lineWidth = 0.95 - pass*0.25;
+      const j = () => (r()-0.5)*1.6, o = 1.6;
+      const x=mk.fx-o, y=mk.fy-o, w=mk.w+o*2, h=mk.h+o*2;
+      ctx.beginPath();
+      ctx.moveTo(x+j(), y+j()); ctx.lineTo(x+w+j(), y+j()); ctx.lineTo(x+w+j(), y+h+j());
+      ctx.lineTo(x+j(), y+h+j()); ctx.lineTo(x+j(), y+j()+2.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // rótulo
+  ctx.setTransform(S,0,0,S,0,0);
+  ctx.fillStyle = warm ? '#6e6556' : '#6a6a66';
+  ctx.font = '3.1px "IBM Plex Mono", monospace'; ctx.textBaseline='alphabetic';
+  ctx.textAlign='left'; ctx.fillText($('caption').value, MARGIN, MARGIN+bH+10);
+  ctx.textAlign='right'; ctx.fillText('CONTACTOS · ' + F.name.toUpperCase(), MARGIN+bW, MARGIN+bH+10);
+
+  const total = F.strips*F.per;
+  const used = Math.min(state.photos.length, total);
+  let s = `${used} de ${total} fotogramas ocupados`;
+  if (state.photos.length > total) s += ` · ${state.photos.length-total} no caben`;
+  if (state.marked.size) s += ` · ${state.marked.size} marcados`;
+  $('status').textContent = s;
+  $('rotWrap').hidden = F.vertical;
+
+  try {
+    out.src = canvas.toDataURL('image/jpeg', 0.92);
+    out.hidden = false; canvas.hidden = true;
+  } catch (e) {
+    showCanvas();
+  }
+}
+function showCanvas(){
+  out.hidden = true; canvas.hidden = false;
+  if (!canvas.parentNode) out.parentNode.appendChild(canvas);
+}
+function safeRender(){ try { render(); } catch (e) { queued = false; $('status').textContent = 'Error al dibujar la hoja: ' + e.message; } }
+function schedule(){ if (!queued){ queued = true; requestAnimationFrame(safeRender); } }
+
+async function loadFile(f){
+  let bmp;
+  try { bmp = await createImageBitmap(f, {imageOrientation:'from-image'}); }
+  catch(e){ bmp = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=URL.createObjectURL(f); }); }
+  const max = 1100, k = Math.min(1, max/Math.max(bmp.width,bmp.height));
+  const w = Math.round(bmp.width*k), h = Math.round(bmp.height*k);
+  const color = document.createElement('canvas'); color.width=w; color.height=h;
+  color.getContext('2d').drawImage(bmp,0,0,w,h);
+  const gray = document.createElement('canvas'); gray.width=w; gray.height=h;
+  const gc = gray.getContext('2d'); const d = color.getContext('2d').getImageData(0,0,w,h); const a = d.data;
+  for (let i=0;i<a.length;i+=4){
+    let y = 0.2126*a[i] + 0.7152*a[i+1] + 0.0722*a[i+2];
+    y = (y-128)*1.08 + 128; y = y<0?0:y>255?255:y;
+    a[i]=a[i+1]=a[i+2]=y;
+  }
+  gc.putImageData(d,0,0);
+  return {name:f.name, color, gray};
+}
+
+$('add').onclick = () => $('files').click();
+$('files').onchange = async e => {
+  const files = [...e.target.files].filter(f => f.type.startsWith('image/'))
+    .sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+  e.target.value = '';
+  $('status').textContent = 'Cargando fotos…';
+  for (const f of files){
+    try { state.photos.push(await loadFile(f)); schedule(); }
+    catch(err){ $('status').textContent = `No se pudo abrir ${f.name}. Prueba con JPG o PNG.`; }
+  }
+  schedule();
+};
+$('clear').onclick = () => { state.photos = []; state.marked.clear(); schedule(); };
+document.querySelectorAll('input[name=fmt]').forEach(r => r.onchange = () => { state.fmt = r.value; state.marked.clear(); schedule(); });
+['bw','craft','rot','warm'].forEach(id => $(id).onchange = schedule);
+$('caption').oninput = schedule;
+
+function onSheetClick(e){
+  const rect = e.currentTarget.getBoundingClientRect();
+  const px = (e.clientX - rect.left) / rect.width * canvas.width;
+  const py = (e.clientY - rect.top) / rect.height * canvas.height;
+  state.frames.forEach((f, idx) => {
+    const p = f.m.inverse().transformPoint(new DOMPoint(px, py));
+    if (p.x >= f.x && p.x <= f.x+f.w && p.y >= f.y && p.y <= f.y+f.h){
+      state.marked.has(idx) ? state.marked.delete(idx) : state.marked.add(idx);
+      schedule();
+    }
+  });
+}
+out.addEventListener('click', onSheetClick);
+canvas.addEventListener('click', onSheetClick);
+
+(document.fonts ? Promise.race([document.fonts.load('500 20px "IBM Plex Mono"'), new Promise(r=>setTimeout(r,1500))]) : Promise.resolve())
+  .catch(()=>{}).then(safeRender);
+</script>
+</body>
+</html>
