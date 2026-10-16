@@ -36,10 +36,9 @@ header p{margin:0;color:var(--muted);max-width:62ch}
 .field{display:flex;flex-direction:column;gap:8px}
 .lbl{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .note{font-size:12.5px;color:var(--muted);margin:0}
-.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:7px;overflow:hidden}
 .seg input{position:absolute;opacity:0;pointer-events:none}
-.seg label{padding:8px 4px;text-align:center;cursor:pointer;font-size:13px;line-height:1.25;border-left:1px solid var(--line)}
-.seg label:first-of-type{border-left:0}
+.seg label{padding:9px 4px;text-align:center;cursor:pointer;font-size:13px;line-height:1.25;background:var(--panel)}
 .seg input:checked+label{background:var(--fg);color:var(--bg)}
 .seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:-2px}
 .btn{font:inherit;font-size:14px;font-weight:500;border-radius:7px;padding:9px 12px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
@@ -76,7 +75,7 @@ header p{margin:0;color:var(--muted);max-width:62ch}
 <div class="wrap">
   <header>
     <h1>Positivador <em>digital</em></h1>
-    <p>Abre una foto o escaneo de tu negativo y la convierte en positivo. Lo que ves ahora es un negativo de ejemplo en blanco y negro.</p>
+    <p>Abre una foto o escaneo de tu negativo, de película o de papel de cámara estenopeica, y lo convierte en positivo. Lo que ves ahora es un negativo de ejemplo.</p>
   </header>
 
   <div class="grid">
@@ -92,8 +91,10 @@ header p{margin:0;color:var(--muted);max-width:62ch}
         <div class="seg" role="radiogroup" aria-label="Tipo de conversión">
           <input type="radio" name="mode" id="m-bw" value="bw" checked><label for="m-bw">Negativo B/N</label>
           <input type="radio" name="mode" id="m-col" value="col"><label for="m-col">Negativo color</label>
+          <input type="radio" name="mode" id="m-paper" value="paper"><label for="m-paper">Papel · estenopeica</label>
           <input type="radio" name="mode" id="m-pos" value="pos"><label for="m-pos">Foto a negativo</label>
         </div>
+        <p class="note" id="modeNote">Película en blanco y negro fotografiada a contraluz.</p>
       </div>
 
       <div class="field">
@@ -103,21 +104,22 @@ header p{margin:0;color:var(--muted);max-width:62ch}
           <button class="btn icon" id="rotR" type="button" aria-label="Girar a la derecha">⟳ 90°</button>
           <button class="btn icon grow" id="flip" type="button">Espejo</button>
         </div>
-        <p class="note">Usa «Espejo» si los números del borde salen al revés.</p>
+        <p class="note">Usa «Espejo» si la imagen sale invertida de izquierda a derecha. Pasa con los números del borde de la película o al escanear un negativo de papel.</p>
       </div>
 
       <div class="field" id="baseField">
-        <span class="lbl">Base de la película</span>
+        <span class="lbl" id="baseLbl">Base de la película</span>
         <div class="base"><div class="swatch" id="swatch"></div><span id="baseTxt">Automática</span></div>
         <div class="row">
           <button class="btn grow" id="pick" type="button">Tomar del borde</button>
           <button class="btn" id="autoBase" type="button">Auto</button>
         </div>
-        <p class="note">Toca una zona sin imagen entre fotogramas. En color corrige la máscara naranja.</p>
+        <p class="note" id="baseNote">Toca una zona sin imagen entre fotogramas. En color corrige la máscara naranja.</p>
       </div>
 
       <div class="field">
         <span class="lbl">Ajustes</span>
+        <div class="slider" data-paper><label for="flat">Igualar iluminación</label><output id="flat-o">0</output><input type="range" id="flat" min="0" max="100" value="0"></div>
         <div class="slider"><label for="exp">Exposición</label><output id="exp-o">0</output><input type="range" id="exp" min="-100" max="100" value="0"></div>
         <div class="slider"><label for="con">Contraste</label><output id="con-o">0</output><input type="range" id="con" min="-100" max="100" value="0"></div>
         <div class="slider"><label for="mid">Medios tonos</label><output id="mid-o">0</output><input type="range" id="mid" min="-100" max="100" value="0"></div>
@@ -149,16 +151,26 @@ header p{margin:0;color:var(--muted);max-width:62ch}
 <script>
 const $ = id => document.getElementById(id);
 const view = $('view'), vctx = view.getContext('2d', {willReadFrequently:true});
-const st = { orig:null, full:null, prev:null, prevData:null, mode:'bw', rot:0, flip:false,
-  base:null, baseManual:false, stats:null, picking:false, showOrig:false, sample:true, queued:false };
+const st = { orig:null, full:null, prev:null, prevData:null, prevMap:null, prevLum:null, mode:'bw', rot:0, flip:false,
+  base:null, baseManual:false, stats:null, picking:false, showOrig:false, sample:null, queued:false };
 const ADJ = ['exp','con','mid','temp','tint','crop'];
+const isMono = () => st.mode==='bw' || st.mode==='paper';
+const NOTES = {
+  bw:   ['Película en blanco y negro fotografiada a contraluz.', 'Toca una zona sin imagen entre fotogramas.'],
+  col:  ['Película en color (C-41) fotografiada a contraluz. Corrige la máscara naranja.', 'Toca una zona sin imagen entre fotogramas para quitar la máscara naranja.'],
+  paper:['Negativo en papel fotográfico, como el de una estenopeica. Fotografíalo con luz de frente, sin reflejos, o escanéalo.', 'Toca el blanco del papel en una zona sin exponer, por ejemplo el borde que tapaba el soporte.'],
+  pos:  ['Convierte una foto normal en negativo.', '']
+};
 
-// ---------- negativo de ejemplo ----------
-function makeSample(){
+// ---------- utilidades ----------
+function rng(seed){ return ()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; }; }
+function vignette(x,y,w,h,k){ const dx=(x/w-0.5)*2, dy=(y/h-0.5)*2; return 1 - k*Math.min(1,(dx*dx+dy*dy)/2); }
+
+// ---------- negativos de ejemplo ----------
+function makeFilmSample(){
   const W=1500, H=1000, c=document.createElement('canvas'); c.width=W; c.height=H;
   const g=c.getContext('2d');
-  const fx=90, fy=150, fw=W-180, fh=H-300; // fotograma dentro de la tira
-  // escena en grises (positivo)
+  const fx=90, fy=150, fw=W-180, fh=H-300;
   const s=document.createElement('canvas'); s.width=fw; s.height=fh; const k=s.getContext('2d');
   let gr=k.createLinearGradient(0,0,0,fh*0.62); gr.addColorStop(0,'#c9c9c9'); gr.addColorStop(1,'#f2f2f2');
   k.fillStyle=gr; k.fillRect(0,0,fw,fh);
@@ -172,22 +184,53 @@ function makeSample(){
   for(let i=0;i<6;i++){k.beginPath();k.ellipse(fw*0.2+7,fh*0.36+i*28,90-i*12,26,0,0,7);k.fill();}
   k.fillRect(0,fh*0.88,fw,fh*0.12);
   const sd=k.getImageData(0,0,fw,fh).data;
-  // película: base clara algo gris, bordes con rotulado
   const base=[226,222,214];
   g.fillStyle='#050505'; g.fillRect(0,0,W,H);
   g.fillStyle=`rgb(${base})`; g.fillRect(0,90,W,H-180);
   g.fillStyle='#3a3836'; g.font='500 26px "IBM Plex Mono", monospace';
   g.fillText('▸ 14     HP5 PLUS     15', 120, 132); g.fillText('▸ 14A', W-260, H-102);
-  const out=g.getImageData(fx,fy,fw,fh), d=out.data; let seed=7;
-  const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
-  for(let i=0,p=0;i<sd.length;i+=4,p++){
-    const S=sd[i]/255, D=0.12+1.05*S+(rnd()-0.5)*0.06;
-    const t=Math.pow(10,-D);
+  const out=g.getImageData(fx,fy,fw,fh), d=out.data, r=rng(7);
+  for(let i=0;i<sd.length;i+=4){
+    const S=sd[i]/255, D=0.12+1.05*S+(r()-0.5)*0.06, t=Math.pow(10,-D);
     d[i]=base[0]*t+8; d[i+1]=base[1]*t+8; d[i+2]=base[2]*t+8; d[i+3]=255;
   }
   g.putImageData(out,fx,fy);
   return c;
 }
+function makePaperSample(){
+  // papel 4×5 de una estenopeica, fotografiado con un flexo: imagen blanda, viñeteo y luz desigual
+  const W=1200, H=1500, c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
+  const m=70, fw=W-2*m, fh=H-2*m;
+  const s=document.createElement('canvas'); s.width=fw; s.height=fh; const k=s.getContext('2d');
+  k.fillStyle='#f4f4f4'; k.fillRect(0,0,fw,fh);                     // cielo: el papel ortocromático lo quema
+  k.fillStyle='#9a9a9a'; k.beginPath(); k.moveTo(0,fh*0.62);         // tejados lejanos
+  for(let x=0;x<=fw;x+=60){ k.lineTo(x, fh*0.6 - ((x/60)%3)*18); } k.lineTo(fw,fh); k.lineTo(0,fh); k.fill();
+  k.fillStyle='#5e5e5e'; k.fillRect(fw*0.18,fh*0.28,fw*0.3,fh*0.72); // edificio
+  k.beginPath(); k.moveTo(fw*0.15,fh*0.29); k.lineTo(fw*0.33,fh*0.17); k.lineTo(fw*0.51,fh*0.29); k.fill();
+  k.fillStyle='#d8d8d8'; for(let r=0;r<4;r++) for(let q=0;q<3;q++) k.fillRect(fw*0.22+q*fw*0.085, fh*0.34+r*fh*0.12, fw*0.05, fh*0.07);
+  k.fillStyle='#2c2c2c'; k.fillRect(fw*0.62,fh*0.35,fw*0.03,fh*0.55); // farola
+  k.beginPath(); k.arc(fw*0.635,fh*0.34,26,0,7); k.fill();
+  k.fillStyle='#7a7a7a'; k.fillRect(0,fh*0.86,fw,fh*0.14);             // suelo
+  const blur=document.createElement('canvas'); blur.width=fw; blur.height=fh; const bk=blur.getContext('2d');
+  bk.filter='blur(4px)'; bk.drawImage(s,0,0); bk.filter='none';
+  const sd=bk.getImageData(0,0,fw,fh).data;
+  const paper=[240,232,218];
+  const img=g.createImageData(W,H), d=img.data, r=rng(11);
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const i=(y*W+x)*4, light=0.78+0.22*(1-x/W)*(0.6+0.4*y/H);  // flexo desde la izquierda
+    let D=0.04;
+    if(x>=m && x<W-m && y>=m && y<H-m){
+      const j=((y-m)*fw+(x-m))*4, S=sd[j]/255*vignette(x-m,y-m,fw,fh,0.55);
+      D=0.06+1.5*Math.pow(S,1.15)+(r()-0.5)*0.04;
+    }
+    const t=Math.pow(10,-D)*light;
+    d[i]=paper[0]*t+10; d[i+1]=paper[1]*t+9; d[i+2]=paper[2]*t+8; d[i+3]=255;
+  }
+  g.putImageData(img,0,0);
+  return c;
+}
+function useSample(kind){ st.sample=kind; st.orig= kind==='paper' ? makePaperSample() : makeFilmSample(); st.rot=0; st.flip=false; st.baseManual=false; $('flip').classList.remove('on'); rebuild();
+  $('status').textContent = kind==='paper' ? 'Ejemplo · negativo de papel' : 'Ejemplo · negativo B/N'; }
 
 // ---------- carga y orientación ----------
 function orient(src, maxSide, maxArea){
@@ -200,29 +243,62 @@ function orient(src, maxSide, maxArea){
   g.drawImage(src,-dw/2,-dh/2,dw,dh);
   return c;
 }
+// mapa de iluminación: la imagen reducida a unos pocos píxeles y ampliada de nuevo
+function illumMap(canvas){
+  const w=canvas.width, h=canvas.height, n=10, sw=Math.max(2,Math.round(n*w/Math.max(w,h))), sh=Math.max(2,Math.round(n*h/Math.max(w,h)));
+  let cur=canvas;
+  while(cur.width>sw*4){ const c=document.createElement('canvas'); c.width=Math.max(sw,cur.width>>1); c.height=Math.max(sh,cur.height>>1); const g=c.getContext('2d'); g.imageSmoothingQuality='high'; g.drawImage(cur,0,0,c.width,c.height); cur=c; }
+  const small=document.createElement('canvas'); small.width=sw; small.height=sh; const sg=small.getContext('2d'); sg.imageSmoothingQuality='high'; sg.drawImage(cur,0,0,sw,sh);
+  const big=document.createElement('canvas'); big.width=w; big.height=h; const bg=big.getContext('2d'); bg.imageSmoothingEnabled=true; bg.imageSmoothingQuality='high'; bg.drawImage(small,0,0,w,h);
+  const d=bg.getImageData(0,0,w,h).data, out=new Float32Array(w*h); let sum=0;
+  for(let i=0,p=0;i<d.length;i+=4,p++){ const v=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; out[p]=Math.max(v,1); sum+=out[p]; }
+  return {map:out, mean:sum/out.length};
+}
+function lumArray(imgData, illum, strength){
+  const s=imgData.data, out=new Uint8ClampedArray(imgData.width*imgData.height);
+  for(let i=0,p=0;i<s.length;i+=4,p++){
+    let L=0.2126*s[i]+0.7152*s[i+1]+0.0722*s[i+2];
+    if(illum && strength>0) L*=Math.pow(illum.mean/illum.map[p], strength);
+    out[p]=L+0.5;
+  }
+  return out;
+}
+const flatStrength=()=> st.mode==='paper' ? +$('flat').value/100 : 0;
+function refreshLum(){
+  if(!isMono()){ st.prevLum=null; return; }
+  const f=flatStrength();
+  if(f>0 && !st.prevMap) st.prevMap=illumMap(st.prev);
+  st.prevLum=lumArray(st.prevData, f>0?st.prevMap:null, f);
+}
 function rebuild(){
   st.full=orient(st.orig, 6000, 16e6);
   st.prev=orient(st.orig, 1400, 2e6);
   st.prevData=st.prev.getContext('2d').getImageData(0,0,st.prev.width,st.prev.height);
+  st.prevMap=null;
   computeStats(); schedule();
   $('status').textContent=`${st.full.width} × ${st.full.height} px`;
 }
 
-// ---------- análisis: base de película y niveles ----------
+// ---------- análisis: base y niveles ----------
 function pct(h, total, p){ let acc=0, lim=total*p; for(let v=0;v<256;v++){acc+=h[v]; if(acc>=lim) return v;} return 255; }
 function computeStats(){
-  const {data,width:w,height:h}=st.prevData;
+  refreshLum();
+  const {data,width:w,height:h}=st.prevData, lum=st.prevLum;
   const hs=[new Float64Array(256),new Float64Array(256),new Float64Array(256),new Float64Array(256)];
   const x0=Math.floor(w*0.1),x1=Math.ceil(w*0.9),y0=Math.floor(h*0.1),y1=Math.ceil(h*0.9); let n=0;
   for(let y=y0;y<y1;y+=2) for(let x=x0;x<x1;x+=2){
-    const i=(y*w+x)*4, r=data[i],g=data[i+1],b=data[i+2];
-    hs[0][r]++; hs[1][g]++; hs[2][b]++; hs[3][Math.round(0.2126*r+0.7152*g+0.0722*b)]++; n++;
+    const p=y*w+x, i=p*4;
+    hs[0][data[i]]++; hs[1][data[i+1]]++; hs[2][data[i+2]]++;
+    hs[3][lum ? lum[p] : Math.round(0.2126*data[i]+0.7152*data[i+1]+0.0722*data[i+2])]++; n++;
   }
-  if(!st.baseManual) st.base=[0,1,2,3].map(c=>Math.max(8,pct(hs[c],n,0.995)));
-  // densidad: claro en el negativo = sombra (D baja); oscuro = luz (D alta)
+  // en papel la base es el blanco del papel: se busca en toda la imagen, incluidos los bordes sin exponer
+  if(!st.baseManual){
+    if(st.mode==='paper' && lum){ const hb=new Float64Array(256); let nb=0; for(let p=0;p<lum.length;p+=3){hb[lum[p]]++;nb++;} st.base=[0,0,0,Math.max(8,pct(hb,nb,0.995))]; }
+    else st.base=[0,1,2,3].map(c=>Math.max(8,pct(hs[c],n,0.995)));
+  }
   st.stats=[0,1,2,3].map(c=>{
-    const b=st.base[c]/255;
-    const vHi=Math.min(pct(hs[c],n,0.998), st.base[c]), vLo=pct(hs[c],n,0.002);
+    const b=Math.max(st.base[c],8)/255;
+    const vHi=Math.min(pct(hs[c],n,0.998), st.base[c]||255), vLo=pct(hs[c],n,0.002);
     return {b, lo:dens(vHi,b), hi:Math.max(dens(vLo,b), dens(vHi,b)+0.05)};
   });
   updateBase();
@@ -234,9 +310,9 @@ function buildLUTs(){
   const a=adj(), luts=[new Uint8ClampedArray(256),new Uint8ClampedArray(256),new Uint8ClampedArray(256)];
   const exp=a.exp/100*0.35, con=a.con/100, gam=Math.pow(2,-a.mid/100*1.2);
   const shift=[a.temp/100*0.08 - a.tint/100*0.03, a.tint/100*0.06, -a.temp/100*0.08 - a.tint/100*0.03];
-  const chans = st.mode==='bw' ? [3,3,3] : [0,1,2];
+  const chans = isMono() ? [3,3,3] : [0,1,2];
   for(let c=0;c<3;c++){
-    const s=st.stats&&st.stats[chans[c]];
+    const s=st.stats[chans[c]];
     for(let v=0;v<256;v++){
       let x = st.mode==='pos' ? 1-v/255 : (dens(v,s.b)-s.lo)/(s.hi-s.lo);
       x = x<0?0:x>1?1:x;
@@ -248,13 +324,10 @@ function buildLUTs(){
   }
   return luts;
 }
-function process(srcData, dst){
-  const L=buildLUTs(), s=srcData.data, d=dst.data, bw=st.mode==='bw';
-  for(let i=0;i<s.length;i+=4){
-    if(bw){ const y=L[0][(0.2126*s[i]+0.7152*s[i+1]+0.0722*s[i+2]+0.5)|0]; d[i]=d[i+1]=d[i+2]=y; }
-    else { d[i]=L[0][s[i]]; d[i+1]=L[1][s[i+1]]; d[i+2]=L[2][s[i+2]]; }
-    d[i+3]=255;
-  }
+function process(srcData, dst, lum){
+  const L=buildLUTs(), s=srcData.data, d=dst.data;
+  if(lum){ const l=L[0]; for(let i=0,p=0;i<d.length;i+=4,p++){ const y=l[lum[p]]; d[i]=d[i+1]=d[i+2]=y; d[i+3]=255; } }
+  else for(let i=0;i<s.length;i+=4){ d[i]=L[0][s[i]]; d[i+1]=L[1][s[i+1]]; d[i+2]=L[2][s[i+2]]; d[i+3]=255; }
   return dst;
 }
 function cropRect(w,h){ const c=+$('crop').value/100; const cx=Math.round(w*c), cy=Math.round(h*c); return {x:cx,y:cy,w:w-2*cx,h:h-2*cy}; }
@@ -264,21 +337,24 @@ function render(){
   st.queued=false;
   const {width:w,height:h}=st.prevData, r=cropRect(w,h);
   view.width=r.w; view.height=r.h;
-  if(st.showOrig){ vctx.putImageData(st.prevData,-r.x,-r.y,r.x,r.y,r.w,r.h); }
-  else {
-    const out=process(st.prevData, new ImageData(w,h));
-    vctx.putImageData(out,-r.x,-r.y,r.x,r.y,r.w,r.h);
-  }
+  if(st.showOrig) vctx.putImageData(st.prevData,-r.x,-r.y,r.x,r.y,r.w,r.h);
+  else vctx.putImageData(process(st.prevData, new ImageData(w,h), st.prevLum),-r.x,-r.y,r.x,r.y,r.w,r.h);
   $('tag').textContent = st.showOrig ? 'Original' : (st.mode==='pos' ? 'Negativo' : 'Positivo');
 }
 function schedule(){ if(!st.queued){ st.queued=true; requestAnimationFrame(()=>{ try{render();}catch(e){ st.queued=false; $('status').textContent='Error: '+e.message; } }); } }
 
 function updateBase(){
-  const b=st.base, isPos=st.mode==='pos';
-  $('baseField').hidden=isPos;
+  const b=st.base;
+  $('baseField').hidden = st.mode==='pos';
+  $('modeNote').textContent = NOTES[st.mode][0];
+  $('baseNote').textContent = NOTES[st.mode][1];
+  document.querySelectorAll('[data-color]').forEach(el=>el.hidden=st.mode!=='col');
+  document.querySelectorAll('[data-paper]').forEach(el=>el.hidden=st.mode!=='paper');
   if(!b) return;
-  $('swatch').style.background = st.mode==='bw' ? `rgb(${b[3]},${b[3]},${b[3]})` : `rgb(${b[0]},${b[1]},${b[2]})`;
-  $('baseTxt').textContent = st.baseManual ? 'Tomada del borde' : 'Automática';
+  $('swatch').style.background = isMono() ? `rgb(${b[3]},${b[3]},${b[3]})` : `rgb(${b[0]},${b[1]},${b[2]})`;
+  $('baseTxt').textContent = st.baseManual ? (st.mode==='paper' ? 'Tomada del papel' : 'Tomada del borde') : 'Automática';
+  $('pick').textContent = st.mode==='paper' ? 'Tomar del papel' : 'Tomar del borde';
+  $('baseLbl').textContent = st.mode==='paper' ? 'Blanco del papel' : 'Base de la película';
 }
 
 // ---------- controles ----------
@@ -290,33 +366,36 @@ $('file').onchange=async e=>{
     let img;
     try{ img=await createImageBitmap(f,{imageOrientation:'from-image'}); }
     catch(_){ img=await new Promise((res,rej)=>{const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(f);}); }
-    st.orig=img; st.sample=false; st.rot=0; st.flip=false; st.baseManual=false; $('result').hidden=true;
+    st.orig=img; st.sample=null; st.rot=0; st.flip=false; st.baseManual=false; $('flip').classList.remove('on'); $('result').hidden=true;
     rebuild();
   }catch(err){ $('status').textContent='No se pudo abrir el archivo. Prueba con JPG o PNG.'; }
 };
 document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=()=>{
-  st.mode=r.value;
-  document.querySelectorAll('[data-color]').forEach(el=>el.hidden=st.mode!=='col');
-  computeStats(); schedule(); $('result').hidden=true;
+  const prev=st.mode; st.mode=r.value; st.baseManual=false; $('result').hidden=true;
+  if(st.sample && (st.mode==='paper') !== (st.sample==='paper')) { useSample(st.mode==='paper'?'paper':'film'); return; }
+  computeStats(); schedule();
 });
 $('rotL').onclick=()=>{st.rot-=90; rebuild();};
 $('rotR').onclick=()=>{st.rot+=90; rebuild();};
 $('flip').onclick=()=>{st.flip=!st.flip; $('flip').classList.toggle('on',st.flip); rebuild();};
 ADJ.forEach(k=>$(k).oninput=()=>{ const v=+$(k).value; $(k+'-o').textContent = k==='crop' ? v+' %' : (v>0?'+':'')+v; schedule(); });
-$('reset').onclick=()=>{ ADJ.forEach(k=>{ $(k).value=0; $(k+'-o').textContent = k==='crop'?'0 %':'0'; }); schedule(); };
-$('autoBase').onclick=()=>{ st.baseManual=false; st.picking=false; $('pick').classList.remove('on'); view.classList.remove('picking'); computeStats(); schedule(); };
+let flatT=null;
+$('flat').oninput=()=>{ $('flat-o').textContent=$('flat').value; clearTimeout(flatT); flatT=setTimeout(()=>{ computeStats(); schedule(); },60); };
+$('reset').onclick=()=>{ ADJ.concat('flat').forEach(k=>{ $(k).value=0; $(k+'-o').textContent = k==='crop'?'0 %':'0'; }); computeStats(); schedule(); };
+$('autoBase').onclick=()=>{ st.baseManual=false; st.picking=false; st.showOrig=false; $('pick').classList.remove('on'); view.classList.remove('picking'); computeStats(); schedule(); };
 $('pick').onclick=()=>{ st.picking=!st.picking; $('pick').classList.toggle('on',st.picking); view.classList.toggle('picking',st.picking);
-  $('status').textContent = st.picking ? 'Toca el borde de la película en la imagen' : ''; if(st.picking && !st.showOrig){ st.showOrig=true; schedule(); } if(!st.picking){ st.showOrig=false; schedule(); } };
+  $('status').textContent = st.picking ? (st.mode==='paper' ? 'Toca el blanco del papel en la imagen' : 'Toca el borde de la película en la imagen') : '';
+  st.showOrig=st.picking; schedule(); };
 view.addEventListener('click',e=>{
   if(!st.picking) return;
   const rect=view.getBoundingClientRect(), {width:w,height:h,data}=st.prevData, r=cropRect(w,h);
   const px=Math.round(r.x+(e.clientX-rect.left)/rect.width*r.w), py=Math.round(r.y+(e.clientY-rect.top)/rect.height*r.h);
-  const acc=[0,0,0]; let n=0;
-  for(let y=py-4;y<=py+4;y++) for(let x=px-4;x<=px+4;x++){ if(x<0||y<0||x>=w||y>=h) continue; const i=(y*w+x)*4; acc[0]+=data[i];acc[1]+=data[i+1];acc[2]+=data[i+2];n++; }
-  const b=acc.map(v=>Math.max(8,Math.round(v/n)));
-  st.base=[b[0],b[1],b[2],Math.round(0.2126*b[0]+0.7152*b[1]+0.0722*b[2])];
+  const acc=[0,0,0,0]; let n=0;
+  for(let y=py-4;y<=py+4;y++) for(let x=px-4;x<=px+4;x++){ if(x<0||y<0||x>=w||y>=h) continue; const p=y*w+x, i=p*4;
+    acc[0]+=data[i];acc[1]+=data[i+1];acc[2]+=data[i+2]; acc[3]+= st.prevLum ? st.prevLum[p] : 0.2126*data[i]+0.7152*data[i+1]+0.0722*data[i+2]; n++; }
+  st.base=acc.map(v=>Math.max(8,Math.round(v/n)));
   st.baseManual=true; st.picking=false; st.showOrig=false;
-  $('pick').classList.remove('on'); view.classList.remove('picking'); $('status').textContent='Base de la película fijada';
+  $('pick').classList.remove('on'); view.classList.remove('picking'); $('status').textContent='Base fijada';
   computeStats(); schedule();
 });
 const cmp=$('compare');
@@ -329,7 +408,9 @@ $('export').onclick=()=>{
   setTimeout(()=>{
     try{
       const f=st.full, w=f.width, h=f.height, src=f.getContext('2d').getImageData(0,0,w,h);
-      const out=process(src, src);
+      let lum=null;
+      if(isMono()){ const fs=flatStrength(); lum=lumArray(src, fs>0?illumMap(f):null, fs); }
+      const out=process(src, src, lum);
       const r=cropRect(w,h), c=document.createElement('canvas'); c.width=r.w; c.height=r.h;
       c.getContext('2d').putImageData(out,-r.x,-r.y,r.x,r.y,r.w,r.h);
       $('final').src=c.toDataURL('image/jpeg',0.93);
@@ -340,9 +421,9 @@ $('export').onclick=()=>{
 };
 
 // ---------- inicio ----------
-document.querySelectorAll('[data-color]').forEach(el=>el.hidden=true);
+document.querySelectorAll('[data-color],[data-paper]').forEach(el=>el.hidden=true);
 (document.fonts ? Promise.race([document.fonts.load('500 20px "IBM Plex Mono"'), new Promise(r=>setTimeout(r,1500))]) : Promise.resolve())
-  .catch(()=>{}).then(()=>{ st.orig=makeSample(); rebuild(); $('status').textContent='Ejemplo · negativo B/N'; });
+  .catch(()=>{}).then(()=>useSample('film'));
 </script>
 </body>
 </html>
