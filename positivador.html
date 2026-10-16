@@ -56,11 +56,21 @@ header p{margin:0;color:var(--muted);max-width:62ch}
 .base{display:flex;align-items:center;gap:10px;font-size:13.5px}
 .swatch{width:26px;height:26px;border-radius:5px;border:1px solid var(--line);flex:none}
 .base span{flex:1;min-width:0}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer}
+.check input{margin-top:3px;accent-color:var(--accent)}
+.check small{display:block;color:var(--muted);font-size:12.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips input{position:absolute;opacity:0;pointer-events:none}
+.chips label{display:flex;align-items:center;gap:6px;padding:6px 10px 6px 7px;border:1px solid var(--line);border-radius:999px;font-size:13px;cursor:pointer}
+.chips i{width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,var(--a) 50%,var(--b) 50%);border:1px solid var(--line)}
+.chips input:checked+label{border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.chips input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
 
 .stage{display:flex;flex-direction:column;gap:12px;min-width:0}
 .viewer{background:var(--stage);border-radius:10px;padding:clamp(10px,2.5vw,26px);display:flex;justify-content:center;align-items:center;min-height:260px;position:relative}
 #view{display:block;max-width:100%;max-height:72vh;width:auto;height:auto;touch-action:manipulation}
-#view.picking{cursor:crosshair}
+#view.picking,#view.cropping{cursor:crosshair}
+#view.cropping{touch-action:none}
 .tag{position:absolute;top:10px;left:12px;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--stage-fg)}
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .bar .status{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-left:auto}
@@ -95,6 +105,17 @@ header p{margin:0;color:var(--muted);max-width:62ch}
           <input type="radio" name="mode" id="m-pos" value="pos"><label for="m-pos">Foto a negativo</label>
         </div>
         <p class="note" id="modeNote">Película en blanco y negro fotografiada a contraluz.</p>
+        <label class="check" id="alreadyWrap"><input type="checkbox" id="already"><span>Ya está en positivo<small>Si ya la invertiste en otra web, solo recorta y da el tono</small></span></label>
+      </div>
+
+      <div class="field">
+        <span class="lbl">Recorte</span>
+        <div class="row">
+          <button class="btn grow" id="cropPaper" type="button">Ajustar al papel</button>
+          <button class="btn grow" id="cropHand" type="button">A mano</button>
+          <button class="btn" id="cropOff" type="button" aria-label="Quitar recorte">Quitar</button>
+        </div>
+        <p class="note" id="cropNote">Quita el fondo que rodea el negativo. «A mano»: arrastra un rectángulo sobre la imagen.</p>
       </div>
 
       <div class="field">
@@ -125,8 +146,19 @@ header p{margin:0;color:var(--muted);max-width:62ch}
         <div class="slider"><label for="mid">Medios tonos</label><output id="mid-o">0</output><input type="range" id="mid" min="-100" max="100" value="0"></div>
         <div class="slider" data-color><label for="temp">Temperatura</label><output id="temp-o">0</output><input type="range" id="temp" min="-100" max="100" value="0"></div>
         <div class="slider" data-color><label for="tint">Matiz</label><output id="tint-o">0</output><input type="range" id="tint" min="-100" max="100" value="0"></div>
-        <div class="slider"><label for="crop">Recortar bordes</label><output id="crop-o">0 %</output><input type="range" id="crop" min="0" max="20" value="0"></div>
         <button class="btn" id="reset" type="button">Restablecer ajustes</button>
+      </div>
+
+      <div class="field" id="toneField">
+        <span class="lbl">Virado</span>
+        <div class="chips" role="radiogroup" aria-label="Tono de la copia">
+          <input type="radio" name="tone" id="t-neutro" value="neutro" checked><label for="t-neutro"><i style="--a:#1a1a1a;--b:#f2f2f2"></i>Neutro</label>
+          <input type="radio" name="tone" id="t-calido" value="calido"><label for="t-calido"><i style="--a:#30080c;--b:#faf2e4"></i>Cálido</label>
+          <input type="radio" name="tone" id="t-sepia" value="sepia"><label for="t-sepia"><i style="--a:#3a2210;--b:#f6e8cf"></i>Sepia</label>
+          <input type="radio" name="tone" id="t-selenio" value="selenio"><label for="t-selenio"><i style="--a:#2a1028;--b:#f7f4f2"></i>Selenio</label>
+          <input type="radio" name="tone" id="t-ciano" value="ciano"><label for="t-ciano"><i style="--a:#0a2048;--b:#eaf0f4"></i>Cianotipia</label>
+        </div>
+        <div class="slider"><label for="toneAmt">Intensidad</label><output id="toneAmt-o">100</output><input type="range" id="toneAmt" min="0" max="100" value="100"></div>
       </div>
     </aside>
 
@@ -152,14 +184,23 @@ header p{margin:0;color:var(--muted);max-width:62ch}
 const $ = id => document.getElementById(id);
 const view = $('view'), vctx = view.getContext('2d', {willReadFrequently:true});
 const st = { orig:null, full:null, prev:null, prevData:null, prevMap:null, prevLum:null, mode:'bw', rot:0, flip:false,
-  base:null, baseManual:false, stats:null, picking:false, showOrig:false, sample:null, queued:false };
-const ADJ = ['exp','con','mid','temp','tint','crop'];
+  base:null, baseManual:false, stats:null, picking:false, showOrig:false, sample:null, queued:false,
+  cr:null, cropping:false, drag:null, toneTouched:false };
+const ADJ = ['exp','con','mid','temp','tint'];
 const isMono = () => st.mode==='bw' || st.mode==='paper';
+const isAlready = () => st.mode==='paper' && $('already').checked;
 const NOTES = {
   bw:   ['Película en blanco y negro fotografiada a contraluz.', 'Toca una zona sin imagen entre fotogramas.'],
   col:  ['Película en color (C-41) fotografiada a contraluz. Corrige la máscara naranja.', 'Toca una zona sin imagen entre fotogramas para quitar la máscara naranja.'],
-  paper:['Negativo en papel fotográfico, como el de una estenopeica. Fotografíalo con luz de frente, sin reflejos, o escanéalo.', 'Toca el blanco del papel en una zona sin exponer, por ejemplo el borde que tapaba el soporte.'],
+  paper:['Negativo en papel fotográfico, como el de una estenopeica. Fotografíalo plano, con luz de frente y sin reflejos.', 'Toca el blanco del papel en una zona sin exponer, por ejemplo el borde que tapaba el soporte.'],
   pos:  ['Convierte una foto normal en negativo.', '']
+};
+const TONES = {
+  neutro: [[0,0,0],[128,128,128],[255,255,255]],
+  calido: [[22,5,8],[130,112,113],[250,244,230]],
+  sepia:  [[32,18,10],[150,117,84],[250,240,220]],
+  selenio:[[26,10,26],[122,104,116],[250,248,245]],
+  ciano:  [[8,26,62],[62,112,160],[236,242,246]]
 };
 
 // ---------- utilidades ----------
@@ -198,39 +239,39 @@ function makeFilmSample(){
   return c;
 }
 function makePaperSample(){
-  // papel 4×5 de una estenopeica, fotografiado con un flexo: imagen blanda, viñeteo y luz desigual
+  // papel de una estenopeica fotografiado sobre una mesa gris: imagen blanda, viñeteo y luz desigual
   const W=1200, H=1500, c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
-  const m=70, fw=W-2*m, fh=H-2*m;
+  const px=150, py=170, pw=W-300, ph=H-340, m=10, fw=pw-2*m, fh=ph-2*m;
   const s=document.createElement('canvas'); s.width=fw; s.height=fh; const k=s.getContext('2d');
-  k.fillStyle='#f4f4f4'; k.fillRect(0,0,fw,fh);                     // cielo: el papel ortocromático lo quema
-  k.fillStyle='#9a9a9a'; k.beginPath(); k.moveTo(0,fh*0.62);         // tejados lejanos
+  k.fillStyle='#f4f4f4'; k.fillRect(0,0,fw,fh);
+  k.fillStyle='#9a9a9a'; k.beginPath(); k.moveTo(0,fh*0.62);
   for(let x=0;x<=fw;x+=60){ k.lineTo(x, fh*0.6 - ((x/60)%3)*18); } k.lineTo(fw,fh); k.lineTo(0,fh); k.fill();
-  k.fillStyle='#5e5e5e'; k.fillRect(fw*0.18,fh*0.28,fw*0.3,fh*0.72); // edificio
+  k.fillStyle='#5e5e5e'; k.fillRect(fw*0.18,fh*0.28,fw*0.3,fh*0.72);
   k.beginPath(); k.moveTo(fw*0.15,fh*0.29); k.lineTo(fw*0.33,fh*0.17); k.lineTo(fw*0.51,fh*0.29); k.fill();
   k.fillStyle='#d8d8d8'; for(let r=0;r<4;r++) for(let q=0;q<3;q++) k.fillRect(fw*0.22+q*fw*0.085, fh*0.34+r*fh*0.12, fw*0.05, fh*0.07);
-  k.fillStyle='#2c2c2c'; k.fillRect(fw*0.62,fh*0.35,fw*0.03,fh*0.55); // farola
+  k.fillStyle='#2c2c2c'; k.fillRect(fw*0.62,fh*0.35,fw*0.03,fh*0.55);
   k.beginPath(); k.arc(fw*0.635,fh*0.34,26,0,7); k.fill();
-  k.fillStyle='#7a7a7a'; k.fillRect(0,fh*0.86,fw,fh*0.14);             // suelo
+  k.fillStyle='#7a7a7a'; k.fillRect(0,fh*0.86,fw,fh*0.14);
   const blur=document.createElement('canvas'); blur.width=fw; blur.height=fh; const bk=blur.getContext('2d');
   bk.filter='blur(4px)'; bk.drawImage(s,0,0); bk.filter='none';
   const sd=bk.getImageData(0,0,fw,fh).data;
-  const paper=[240,232,218];
+  const paper=[240,232,218], table=[78,80,84];
   const img=g.createImageData(W,H), d=img.data, r=rng(11);
   for(let y=0;y<H;y++) for(let x=0;x<W;x++){
-    const i=(y*W+x)*4, light=0.78+0.22*(1-x/W)*(0.6+0.4*y/H);  // flexo desde la izquierda
-    let D=0.04;
-    if(x>=m && x<W-m && y>=m && y<H-m){
-      const j=((y-m)*fw+(x-m))*4, S=sd[j]/255*vignette(x-m,y-m,fw,fh,0.55);
-      D=0.06+1.5*Math.pow(S,1.15)+(r()-0.5)*0.04;
-    }
+    const i=(y*W+x)*4, light=0.8+0.2*(1-x/W)*(0.6+0.4*y/H);
+    if(x<px||x>=px+pw||y<py||y>=py+ph){ const n=(r()-0.5)*6; d[i]=table[0]*light+n; d[i+1]=table[1]*light+n; d[i+2]=table[2]*light+n; d[i+3]=255; continue; }
+    let D=0.04; const ix=x-px-m, iy=y-py-m;
+    if(ix>=0&&ix<fw&&iy>=0&&iy<fh){ const j=(iy*fw+ix)*4, S=sd[j]/255*vignette(ix,iy,fw,fh,0.55); D=0.06+1.5*Math.pow(S,1.15)+(r()-0.5)*0.04; }
     const t=Math.pow(10,-D)*light;
     d[i]=paper[0]*t+10; d[i+1]=paper[1]*t+9; d[i+2]=paper[2]*t+8; d[i+3]=255;
   }
   g.putImageData(img,0,0);
   return c;
 }
-function useSample(kind){ st.sample=kind; st.orig= kind==='paper' ? makePaperSample() : makeFilmSample(); st.rot=0; st.flip=false; st.baseManual=false; $('flip').classList.remove('on'); rebuild();
+function useSample(kind){ st.sample=kind; st.orig= kind==='paper' ? makePaperSample() : makeFilmSample(); resetGeometry(); rebuild();
+  if(st.mode==='paper') autoCrop(true);
   $('status').textContent = kind==='paper' ? 'Ejemplo · negativo de papel' : 'Ejemplo · negativo B/N'; }
+function resetGeometry(){ st.rot=0; st.flip=false; st.baseManual=false; st.cr=null; st.cropping=false; $('flip').classList.remove('on'); $('cropHand').classList.remove('on'); view.classList.remove('cropping'); }
 
 // ---------- carga y orientación ----------
 function orient(src, maxSide, maxArea){
@@ -243,7 +284,6 @@ function orient(src, maxSide, maxArea){
   g.drawImage(src,-dw/2,-dh/2,dw,dh);
   return c;
 }
-// mapa de iluminación: la imagen reducida a unos pocos píxeles y ampliada de nuevo
 function illumMap(canvas){
   const w=canvas.width, h=canvas.height, n=10, sw=Math.max(2,Math.round(n*w/Math.max(w,h))), sh=Math.max(2,Math.round(n*h/Math.max(w,h)));
   let cur=canvas;
@@ -279,29 +319,76 @@ function rebuild(){
   $('status').textContent=`${st.full.width} × ${st.full.height} px`;
 }
 
+// ---------- recorte ----------
+function cropPx(w,h,ignoreCropping){
+  if(!st.cr || (st.cropping && !ignoreCropping)) return {x:0,y:0,w,h};
+  const c=st.cr, x=Math.round(c.x0*w), y=Math.round(c.y0*h);
+  return {x, y, w:Math.max(1,Math.round(c.x1*w)-x), h:Math.max(1,Math.round(c.y1*h)-y)};
+}
+// detecta el papel: lo que se distingue del fondo que toca los bordes de la foto
+function detectPaper(){
+  const {data,width:w,height:h}=st.prevData, L=i=>0.2126*data[i]+0.7152*data[i+1]+0.0722*data[i+2];
+  const b=Math.max(2,Math.round(Math.min(w,h)*0.02)), pts=[];
+  // fondo modelado como un plano (la luz suele caer en degradado); se descartan los puntos atípicos
+  for(let y=0;y<h;y+=2) for(let x=0;x<w;x+=2){ if(x<b||y<b||x>=w-b||y>=h-b) pts.push([x,y,L((y*w+x)*4)]); }
+  let coef=[0,0,0], keep=pts.map(()=>true), mad=0;
+  for(let it=0;it<4;it++){
+    const A=[[0,0,0],[0,0,0],[0,0,0]], B=[0,0,0];
+    pts.forEach((p,i)=>{ if(!keep[i]) return; const r=[1,p[0],p[1]]; for(let j=0;j<3;j++){ B[j]+=r[j]*p[2]; for(let k=0;k<3;k++) A[j][k]+=r[j]*r[k]; } });
+    coef=solve3(A,B) || coef;
+    const res=pts.map(p=>Math.abs(p[2]-(coef[0]+coef[1]*p[0]+coef[2]*p[1])));
+    const kept=res.filter((_,i)=>keep[i]).sort((a,c)=>a-c); mad=kept[kept.length>>1]||0;
+    keep=res.map(r=>r<=Math.max(6,2.5*mad));
+  }
+  const tol=Math.max(20, mad*5), bgAt=(x,y)=>coef[0]+coef[1]*x+coef[2]*y;
+  const rows=new Float32Array(h), cols=new Float32Array(w);
+  for(let y=0;y<h;y+=2) for(let x=0;x<w;x+=2){ if(Math.abs(L((y*w+x)*4)-bgAt(x,y))>tol){ rows[y]++; cols[x]++; } }
+  const span=(arr,n,thr)=>{ let a=-1,z=-1; for(let i=0;i<arr.length;i+=2){ if(arr[i]/(n/2)>thr){ if(a<0)a=i; z=i; } } return [a,z]; };
+  const [y0,y1]=span(rows,w,0.3), [x0,x1]=span(cols,h,0.3);
+  if(y0<0||x0<0) return null;
+  const iw=(x1-x0)/w, ih=(y1-y0)/h;
+  if(iw<0.2||ih<0.2||(iw>0.97&&ih>0.97)) return null;
+  const ins=0.012;
+  return {x0:x0/w+ins, y0:y0/h+ins, x1:x1/w-ins, y1:y1/h-ins};
+}
+function solve3(A,B){
+  const m=A.map((r,i)=>[...r,B[i]]);
+  for(let c=0;c<3;c++){ let p=c; for(let r=c+1;r<3;r++) if(Math.abs(m[r][c])>Math.abs(m[p][c])) p=r; [m[c],m[p]]=[m[p],m[c]];
+    if(Math.abs(m[c][c])<1e-9) return null; for(let r=0;r<3;r++){ if(r===c) continue; const f=m[r][c]/m[c][c]; for(let k=c;k<4;k++) m[r][k]-=f*m[c][k]; } }
+  return [m[0][3]/m[0][0], m[1][3]/m[1][1], m[2][3]/m[2][2]];
+}
+function autoCrop(silent){
+  const r=detectPaper();
+  if(r){ st.cr=r; if(!silent) $('status').textContent='Recortado al papel'; }
+  else if(!silent) $('status').textContent='No encuentro el borde del papel. Recorta «A mano».';
+  computeStats(); schedule();
+}
+
 // ---------- análisis: base y niveles ----------
 function pct(h, total, p){ let acc=0, lim=total*p; for(let v=0;v<256;v++){acc+=h[v]; if(acc>=lim) return v;} return 255; }
 function computeStats(){
   refreshLum();
-  const {data,width:w,height:h}=st.prevData, lum=st.prevLum;
+  const {data,width:w,height:h}=st.prevData, lum=st.prevLum, r=cropPx(w,h,true);
   const hs=[new Float64Array(256),new Float64Array(256),new Float64Array(256),new Float64Array(256)];
-  const x0=Math.floor(w*0.1),x1=Math.ceil(w*0.9),y0=Math.floor(h*0.1),y1=Math.ceil(h*0.9); let n=0;
+  const mx=st.cr?0.04:0.1, my=st.cr?0.04:0.1;
+  const x0=Math.floor(r.x+r.w*mx),x1=Math.ceil(r.x+r.w*(1-mx)),y0=Math.floor(r.y+r.h*my),y1=Math.ceil(r.y+r.h*(1-my)); let n=0;
   for(let y=y0;y<y1;y+=2) for(let x=x0;x<x1;x+=2){
     const p=y*w+x, i=p*4;
     hs[0][data[i]]++; hs[1][data[i+1]]++; hs[2][data[i+2]]++;
     hs[3][lum ? lum[p] : Math.round(0.2126*data[i]+0.7152*data[i+1]+0.0722*data[i+2])]++; n++;
   }
-  // en papel la base es el blanco del papel: se busca en toda la imagen, incluidos los bordes sin exponer
   if(!st.baseManual){
-    if(st.mode==='paper' && lum){ const hb=new Float64Array(256); let nb=0; for(let p=0;p<lum.length;p+=3){hb[lum[p]]++;nb++;} st.base=[0,0,0,Math.max(8,pct(hb,nb,0.995))]; }
+    if(st.mode==='paper' && lum){ const hb=new Float64Array(256); let nb=0;
+      for(let y=r.y;y<r.y+r.h;y+=2) for(let x=r.x;x<r.x+r.w;x+=2){ hb[lum[y*w+x]]++; nb++; }
+      const v=Math.max(8,pct(hb,nb,0.995)); st.base=[v,v,v,v]; }
     else st.base=[0,1,2,3].map(c=>Math.max(8,pct(hs[c],n,0.995)));
   }
   st.stats=[0,1,2,3].map(c=>{
     const b=Math.max(st.base[c],8)/255;
     const vHi=Math.min(pct(hs[c],n,0.998), st.base[c]||255), vLo=pct(hs[c],n,0.002);
-    return {b, lo:dens(vHi,b), hi:Math.max(dens(vLo,b), dens(vHi,b)+0.05)};
+    return {b, lo:dens(vHi,b), hi:Math.max(dens(vLo,b), dens(vHi,b)+0.05), rlo:pct(hs[c],n,0.002), rhi:Math.max(pct(hs[c],n,0.998), pct(hs[c],n,0.002)+5)};
   });
-  updateBase();
+  updateUI();
 }
 const dens=(v,b)=>-Math.log10(Math.max(v,0.5)/255/b);
 
@@ -310,11 +397,15 @@ function buildLUTs(){
   const a=adj(), luts=[new Uint8ClampedArray(256),new Uint8ClampedArray(256),new Uint8ClampedArray(256)];
   const exp=a.exp/100*0.35, con=a.con/100, gam=Math.pow(2,-a.mid/100*1.2);
   const shift=[a.temp/100*0.08 - a.tint/100*0.03, a.tint/100*0.06, -a.temp/100*0.08 - a.tint/100*0.03];
-  const chans = isMono() ? [3,3,3] : [0,1,2];
+  const chans = isMono() ? [3,3,3] : [0,1,2], already=isAlready();
   for(let c=0;c<3;c++){
     const s=st.stats[chans[c]];
     for(let v=0;v<256;v++){
-      let x = st.mode==='pos' ? 1-v/255 : (dens(v,s.b)-s.lo)/(s.hi-s.lo);
+      // papel: se fotografía con luz reflejada, así que basta una inversión lineal entre su blanco y su negro
+      const phi=Math.min(s.rhi, st.base[3]||255);
+      let x = st.mode==='pos' ? 1-v/255 : already ? (v-s.rlo)/(s.rhi-s.rlo)
+            : st.mode==='paper' ? (phi-v)/Math.max(5,phi-s.rlo)
+            : (dens(v,s.b)-s.lo)/(s.hi-s.lo);
       x = x<0?0:x>1?1:x;
       x = Math.pow(x,gam) + exp;
       x = (x-0.5)*(1+con)+0.5;
@@ -324,38 +415,58 @@ function buildLUTs(){
   }
   return luts;
 }
+function toneLUT(){
+  const name=document.querySelector('input[name=tone]:checked').value, t=TONES[name], amt=+$('toneAmt').value/100;
+  const out=[new Uint8ClampedArray(256),new Uint8ClampedArray(256),new Uint8ClampedArray(256)];
+  for(let y=0;y<256;y++){
+    const u=y/255, [a,b,k]= u<0.5 ? [t[0],t[1],u*2] : [t[1],t[2],(u-0.5)*2];
+    for(let c=0;c<3;c++){ const col=a[c]+(b[c]-a[c])*k; out[c][y]=Math.round(y+(col-y)*amt); }
+  }
+  return out;
+}
 function process(srcData, dst, lum){
   const L=buildLUTs(), s=srcData.data, d=dst.data;
-  if(lum){ const l=L[0]; for(let i=0,p=0;i<d.length;i+=4,p++){ const y=l[lum[p]]; d[i]=d[i+1]=d[i+2]=y; d[i+3]=255; } }
+  if(lum){ const l=L[0], T=toneLUT(); for(let i=0,p=0;i<d.length;i+=4,p++){ const y=l[lum[p]]; d[i]=T[0][y]; d[i+1]=T[1][y]; d[i+2]=T[2][y]; d[i+3]=255; } }
   else for(let i=0;i<s.length;i+=4){ d[i]=L[0][s[i]]; d[i+1]=L[1][s[i+1]]; d[i+2]=L[2][s[i+2]]; d[i+3]=255; }
   return dst;
 }
-function cropRect(w,h){ const c=+$('crop').value/100; const cx=Math.round(w*c), cy=Math.round(h*c); return {x:cx,y:cy,w:w-2*cx,h:h-2*cy}; }
 
 // ---------- dibujo ----------
 function render(){
   st.queued=false;
-  const {width:w,height:h}=st.prevData, r=cropRect(w,h);
+  const {width:w,height:h}=st.prevData, r=cropPx(w,h);
   view.width=r.w; view.height=r.h;
   if(st.showOrig) vctx.putImageData(st.prevData,-r.x,-r.y,r.x,r.y,r.w,r.h);
   else vctx.putImageData(process(st.prevData, new ImageData(w,h), st.prevLum),-r.x,-r.y,r.x,r.y,r.w,r.h);
-  $('tag').textContent = st.showOrig ? 'Original' : (st.mode==='pos' ? 'Negativo' : 'Positivo');
+  if(st.cropping){
+    const c = st.drag ? norm(st.drag) : st.cr;
+    if(c){
+      const x=c.x0*w, y=c.y0*h, cw=(c.x1-c.x0)*w, ch=(c.y1-c.y0)*h;
+      vctx.save(); vctx.fillStyle='rgba(0,0,0,.6)';
+      vctx.beginPath(); vctx.rect(0,0,w,h); vctx.rect(x,y,cw,ch); vctx.fill('evenodd');
+      vctx.strokeStyle='#ff5b48'; vctx.lineWidth=Math.max(2,w/400); vctx.strokeRect(x,y,cw,ch); vctx.restore();
+    }
+  }
+  $('tag').textContent = st.cropping ? 'Recorte' : st.showOrig ? 'Original' : (st.mode==='pos' ? 'Negativo' : 'Positivo');
 }
 function schedule(){ if(!st.queued){ st.queued=true; requestAnimationFrame(()=>{ try{render();}catch(e){ st.queued=false; $('status').textContent='Error: '+e.message; } }); } }
 
-function updateBase(){
+function updateUI(){
   const b=st.base;
-  $('baseField').hidden = st.mode==='pos';
+  $('baseField').hidden = st.mode==='pos' || isAlready();
+  $('alreadyWrap').hidden = st.mode!=='paper';
+  $('toneField').hidden = !isMono();
   $('modeNote').textContent = NOTES[st.mode][0];
   $('baseNote').textContent = NOTES[st.mode][1];
   document.querySelectorAll('[data-color]').forEach(el=>el.hidden=st.mode!=='col');
   document.querySelectorAll('[data-paper]').forEach(el=>el.hidden=st.mode!=='paper');
+  $('pick').textContent = st.mode==='paper' ? 'Tomar del papel' : 'Tomar del borde';
+  $('baseLbl').textContent = st.mode==='paper' ? 'Blanco del papel' : 'Base de la película';
   if(!b) return;
   $('swatch').style.background = isMono() ? `rgb(${b[3]},${b[3]},${b[3]})` : `rgb(${b[0]},${b[1]},${b[2]})`;
   $('baseTxt').textContent = st.baseManual ? (st.mode==='paper' ? 'Tomada del papel' : 'Tomada del borde') : 'Automática';
-  $('pick').textContent = st.mode==='paper' ? 'Tomar del papel' : 'Tomar del borde';
-  $('baseLbl').textContent = st.mode==='paper' ? 'Blanco del papel' : 'Base de la película';
 }
+function setTone(name){ const el=$('t-'+name); if(el) el.checked=true; }
 
 // ---------- controles ----------
 $('open').onclick=()=>$('file').click();
@@ -366,34 +477,54 @@ $('file').onchange=async e=>{
     let img;
     try{ img=await createImageBitmap(f,{imageOrientation:'from-image'}); }
     catch(_){ img=await new Promise((res,rej)=>{const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(f);}); }
-    st.orig=img; st.sample=null; st.rot=0; st.flip=false; st.baseManual=false; $('flip').classList.remove('on'); $('result').hidden=true;
+    st.orig=img; st.sample=null; resetGeometry(); $('result').hidden=true;
     rebuild();
+    if(st.mode==='paper') autoCrop(false);
   }catch(err){ $('status').textContent='No se pudo abrir el archivo. Prueba con JPG o PNG.'; }
 };
 document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=()=>{
-  const prev=st.mode; st.mode=r.value; st.baseManual=false; $('result').hidden=true;
+  st.mode=r.value; st.baseManual=false; $('result').hidden=true;
+  if(!st.toneTouched) setTone(st.mode==='paper'?'calido':'neutro');
   if(st.sample && (st.mode==='paper') !== (st.sample==='paper')) { useSample(st.mode==='paper'?'paper':'film'); return; }
+  if(st.mode==='paper' && !st.cr) { computeStats(); autoCrop(true); return; }
   computeStats(); schedule();
 });
-$('rotL').onclick=()=>{st.rot-=90; rebuild();};
-$('rotR').onclick=()=>{st.rot+=90; rebuild();};
-$('flip').onclick=()=>{st.flip=!st.flip; $('flip').classList.toggle('on',st.flip); rebuild();};
-ADJ.forEach(k=>$(k).oninput=()=>{ const v=+$(k).value; $(k+'-o').textContent = k==='crop' ? v+' %' : (v>0?'+':'')+v; schedule(); });
+$('already').onchange=()=>{ computeStats(); schedule(); };
+document.querySelectorAll('input[name=tone]').forEach(r=>r.onchange=()=>{ st.toneTouched=true; schedule(); });
+$('toneAmt').oninput=()=>{ $('toneAmt-o').textContent=$('toneAmt').value; schedule(); };
+$('rotL').onclick=()=>{st.rot-=90; st.cr=null; rebuild();};
+$('rotR').onclick=()=>{st.rot+=90; st.cr=null; rebuild();};
+$('flip').onclick=()=>{st.flip=!st.flip; if(st.cr){ const c=st.cr; st.cr={x0:1-c.x1,y0:c.y0,x1:1-c.x0,y1:c.y1}; } $('flip').classList.toggle('on',st.flip); rebuild();};
+ADJ.forEach(k=>$(k).oninput=()=>{ const v=+$(k).value; $(k+'-o').textContent=(v>0?'+':'')+v; schedule(); });
 let flatT=null;
 $('flat').oninput=()=>{ $('flat-o').textContent=$('flat').value; clearTimeout(flatT); flatT=setTimeout(()=>{ computeStats(); schedule(); },60); };
-$('reset').onclick=()=>{ ADJ.concat('flat').forEach(k=>{ $(k).value=0; $(k+'-o').textContent = k==='crop'?'0 %':'0'; }); computeStats(); schedule(); };
+$('reset').onclick=()=>{ ADJ.concat('flat').forEach(k=>{ $(k).value=0; $(k+'-o').textContent='0'; }); computeStats(); schedule(); };
+$('cropPaper').onclick=()=>{ endCropping(); autoCrop(false); };
+$('cropOff').onclick=()=>{ endCropping(); st.cr=null; computeStats(); schedule(); $('status').textContent='Sin recorte'; };
+$('cropHand').onclick=()=>{ st.cropping=!st.cropping; $('cropHand').classList.toggle('on',st.cropping); view.classList.toggle('cropping',st.cropping);
+  $('status').textContent = st.cropping ? 'Arrastra sobre la imagen para recortar' : ''; schedule(); };
+function endCropping(){ st.cropping=false; st.drag=null; $('cropHand').classList.remove('on'); view.classList.remove('cropping'); }
+function norm(d){ return {x0:Math.min(d.a[0],d.b[0]), y0:Math.min(d.a[1],d.b[1]), x1:Math.max(d.a[0],d.b[0]), y1:Math.max(d.a[1],d.b[1])}; }
+function ptNorm(e){ const rc=view.getBoundingClientRect(); return [Math.min(1,Math.max(0,(e.clientX-rc.left)/rc.width)), Math.min(1,Math.max(0,(e.clientY-rc.top)/rc.height))]; }
+view.addEventListener('pointerdown',e=>{ if(!st.cropping) return; e.preventDefault(); view.setPointerCapture(e.pointerId); const p=ptNorm(e); st.drag={a:p,b:p}; schedule(); });
+view.addEventListener('pointermove',e=>{ if(!st.cropping||!st.drag) return; st.drag.b=ptNorm(e); schedule(); });
+view.addEventListener('pointerup',e=>{ if(!st.cropping||!st.drag) return; const c=norm(st.drag); st.drag=null;
+  if(c.x1-c.x0>0.03 && c.y1-c.y0>0.03){ st.cr=c; endCropping(); $('status').textContent='Recortado'; computeStats(); }
+  schedule(); });
+
 $('autoBase').onclick=()=>{ st.baseManual=false; st.picking=false; st.showOrig=false; $('pick').classList.remove('on'); view.classList.remove('picking'); computeStats(); schedule(); };
-$('pick').onclick=()=>{ st.picking=!st.picking; $('pick').classList.toggle('on',st.picking); view.classList.toggle('picking',st.picking);
+$('pick').onclick=()=>{ endCropping(); st.picking=!st.picking; $('pick').classList.toggle('on',st.picking); view.classList.toggle('picking',st.picking);
   $('status').textContent = st.picking ? (st.mode==='paper' ? 'Toca el blanco del papel en la imagen' : 'Toca el borde de la película en la imagen') : '';
   st.showOrig=st.picking; schedule(); };
 view.addEventListener('click',e=>{
   if(!st.picking) return;
-  const rect=view.getBoundingClientRect(), {width:w,height:h,data}=st.prevData, r=cropRect(w,h);
+  const rect=view.getBoundingClientRect(), {width:w,height:h,data}=st.prevData, r=cropPx(w,h);
   const px=Math.round(r.x+(e.clientX-rect.left)/rect.width*r.w), py=Math.round(r.y+(e.clientY-rect.top)/rect.height*r.h);
   const acc=[0,0,0,0]; let n=0;
   for(let y=py-4;y<=py+4;y++) for(let x=px-4;x<=px+4;x++){ if(x<0||y<0||x>=w||y>=h) continue; const p=y*w+x, i=p*4;
     acc[0]+=data[i];acc[1]+=data[i+1];acc[2]+=data[i+2]; acc[3]+= st.prevLum ? st.prevLum[p] : 0.2126*data[i]+0.7152*data[i+1]+0.0722*data[i+2]; n++; }
   st.base=acc.map(v=>Math.max(8,Math.round(v/n)));
+  if(st.mode==='paper') st.base=[st.base[3],st.base[3],st.base[3],st.base[3]];
   st.baseManual=true; st.picking=false; st.showOrig=false;
   $('pick').classList.remove('on'); view.classList.remove('picking'); $('status').textContent='Base fijada';
   computeStats(); schedule();
@@ -404,14 +535,14 @@ cmp.addEventListener('pointerdown',holdOn); cmp.addEventListener('pointerup',hol
 cmp.addEventListener('keydown',e=>{ if(e.key===' '||e.key==='Enter'){ holdOn(e); } }); cmp.addEventListener('keyup',holdOff);
 
 $('export').onclick=()=>{
-  $('status').textContent='Preparando…';
+  endCropping(); $('status').textContent='Preparando…';
   setTimeout(()=>{
     try{
       const f=st.full, w=f.width, h=f.height, src=f.getContext('2d').getImageData(0,0,w,h);
       let lum=null;
       if(isMono()){ const fs=flatStrength(); lum=lumArray(src, fs>0?illumMap(f):null, fs); }
       const out=process(src, src, lum);
-      const r=cropRect(w,h), c=document.createElement('canvas'); c.width=r.w; c.height=r.h;
+      const r=cropPx(w,h), c=document.createElement('canvas'); c.width=r.w; c.height=r.h;
       c.getContext('2d').putImageData(out,-r.x,-r.y,r.x,r.y,r.w,r.h);
       $('final').src=c.toDataURL('image/jpeg',0.93);
       $('result').hidden=false; $('status').textContent=`Lista · ${r.w} × ${r.h} px`;
