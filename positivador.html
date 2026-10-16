@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Positivador digital</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: mesa de trabajo — controles a la izquierda, visor oscuro (como una mesa de luz apagada) a la derecha; se apilan en móvil */
+:root{
+  --bg:#ebe9e5; --panel:#f8f7f4; --fg:#1d1b19; --muted:#6c6762; --line:#d5d1cb;
+  --accent:#c12a1e; --accent-fg:#fff; --stage:#1c1a19; --stage-fg:#bdb5ae;
+  --f-display:"Instrument Serif", Georgia, "Times New Roman", serif;
+  --f-body:"Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121010; --panel:#1b1817; --fg:#ece6e1; --muted:#9b928b; --line:#2f2a27; --accent:#ff5b48; --accent-fg:#1a0c0a; --stage:#0b0a0a; --stage-fg:#9b928b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121010; --panel:#1b1817; --fg:#ece6e1; --muted:#9b928b; --line:#2f2a27; --accent:#ff5b48; --accent-fg:#1a0c0a; --stage:#0b0a0a; --stage-fg:#9b928b; color-scheme:dark}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1240px;margin:0 auto;padding-block:28px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;margin-bottom:22px}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(2rem,4.5vw,2.8rem);line-height:1.05;margin:0;text-wrap:balance}
+h1 em{color:var(--accent)}
+header p{margin:0;color:var(--muted);max-width:62ch}
+.grid{display:grid;grid-template-columns:310px minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:20px}
+.field{display:flex;flex-direction:column;gap:8px}
+.lbl{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{padding:8px 4px;text-align:center;cursor:pointer;font-size:13px;line-height:1.25;border-left:1px solid var(--line)}
+.seg label:first-of-type{border-left:0}
+.seg input:checked+label{background:var(--fg);color:var(--bg)}
+.seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:-2px}
+.btn{font:inherit;font-size:14px;font-weight:500;border-radius:7px;padding:9px 12px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row .grow{flex:1}
+.icon{min-width:44px;font-family:var(--f-mono)}
+#file{display:none}
+.slider{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center}
+.slider label{font-size:14px}
+.slider output{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;min-width:4ch}
+.slider input{grid-column:1/-1;width:100%;accent-color:var(--accent);margin:0}
+.base{display:flex;align-items:center;gap:10px;font-size:13.5px}
+.swatch{width:26px;height:26px;border-radius:5px;border:1px solid var(--line);flex:none}
+.base span{flex:1;min-width:0}
+
+.stage{display:flex;flex-direction:column;gap:12px;min-width:0}
+.viewer{background:var(--stage);border-radius:10px;padding:clamp(10px,2.5vw,26px);display:flex;justify-content:center;align-items:center;min-height:260px;position:relative}
+#view{display:block;max-width:100%;max-height:72vh;width:auto;height:auto;touch-action:manipulation}
+#view.picking{cursor:crosshair}
+.tag{position:absolute;top:10px;left:12px;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--stage-fg)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bar .status{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-left:auto}
+.result{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.result img{display:block;max-width:100%;max-height:60vh;width:auto;margin:0 auto}
+.result p{margin:0;font-size:13.5px;color:var(--muted)}
+.result b{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Positivador <em>digital</em></h1>
+    <p>Abre una foto o escaneo de tu negativo y la convierte en positivo. Lo que ves ahora es un negativo de ejemplo en blanco y negro.</p>
+  </header>
+
+  <div class="grid">
+    <aside class="panel">
+      <div class="field">
+        <button class="btn primary" id="open" type="button">Abrir foto del negativo</button>
+        <input type="file" id="file" accept="image/*">
+        <p class="note">Fotografíalo sobre una tablet o mesa de luz en blanco, con la película plana. Tus fotos no salen de tu dispositivo.</p>
+      </div>
+
+      <div class="field">
+        <span class="lbl">Tipo</span>
+        <div class="seg" role="radiogroup" aria-label="Tipo de conversión">
+          <input type="radio" name="mode" id="m-bw" value="bw" checked><label for="m-bw">Negativo B/N</label>
+          <input type="radio" name="mode" id="m-col" value="col"><label for="m-col">Negativo color</label>
+          <input type="radio" name="mode" id="m-pos" value="pos"><label for="m-pos">Foto a negativo</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lbl">Orientación</span>
+        <div class="row">
+          <button class="btn icon" id="rotL" type="button" aria-label="Girar a la izquierda">⟲ 90°</button>
+          <button class="btn icon" id="rotR" type="button" aria-label="Girar a la derecha">⟳ 90°</button>
+          <button class="btn icon grow" id="flip" type="button">Espejo</button>
+        </div>
+        <p class="note">Usa «Espejo» si los números del borde salen al revés.</p>
+      </div>
+
+      <div class="field" id="baseField">
+        <span class="lbl">Base de la película</span>
+        <div class="base"><div class="swatch" id="swatch"></div><span id="baseTxt">Automática</span></div>
+        <div class="row">
+          <button class="btn grow" id="pick" type="button">Tomar del borde</button>
+          <button class="btn" id="autoBase" type="button">Auto</button>
+        </div>
+        <p class="note">Toca una zona sin imagen entre fotogramas. En color corrige la máscara naranja.</p>
+      </div>
+
+      <div class="field">
+        <span class="lbl">Ajustes</span>
+        <div class="slider"><label for="exp">Exposición</label><output id="exp-o">0</output><input type="range" id="exp" min="-100" max="100" value="0"></div>
+        <div class="slider"><label for="con">Contraste</label><output id="con-o">0</output><input type="range" id="con" min="-100" max="100" value="0"></div>
+        <div class="slider"><label for="mid">Medios tonos</label><output id="mid-o">0</output><input type="range" id="mid" min="-100" max="100" value="0"></div>
+        <div class="slider" data-color><label for="temp">Temperatura</label><output id="temp-o">0</output><input type="range" id="temp" min="-100" max="100" value="0"></div>
+        <div class="slider" data-color><label for="tint">Matiz</label><output id="tint-o">0</output><input type="range" id="tint" min="-100" max="100" value="0"></div>
+        <div class="slider"><label for="crop">Recortar bordes</label><output id="crop-o">0 %</output><input type="range" id="crop" min="0" max="20" value="0"></div>
+        <button class="btn" id="reset" type="button">Restablecer ajustes</button>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="viewer">
+        <span class="tag" id="tag">Positivo</span>
+        <canvas id="view" aria-label="Vista previa del resultado"></canvas>
+      </div>
+      <div class="bar">
+        <button class="btn" id="compare" type="button">Mantén para ver el original</button>
+        <button class="btn primary" id="export" type="button">Preparar imagen final</button>
+        <span class="status" id="status"></span>
+      </div>
+      <div class="result" id="result" hidden>
+        <img id="final" alt="Positivo a resolución completa">
+        <p><b>Para guardarla:</b> clic derecho sobre la imagen › Guardar imagen. En móvil, mantén pulsada la imagen.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const view = $('view'), vctx = view.getContext('2d', {willReadFrequently:true});
+const st = { orig:null, full:null, prev:null, prevData:null, mode:'bw', rot:0, flip:false,
+  base:null, baseManual:false, stats:null, picking:false, showOrig:false, sample:true, queued:false };
+const ADJ = ['exp','con','mid','temp','tint','crop'];
+
+// ---------- negativo de ejemplo ----------
+function makeSample(){
+  const W=1500, H=1000, c=document.createElement('canvas'); c.width=W; c.height=H;
+  const g=c.getContext('2d');
+  const fx=90, fy=150, fw=W-180, fh=H-300; // fotograma dentro de la tira
+  // escena en grises (positivo)
+  const s=document.createElement('canvas'); s.width=fw; s.height=fh; const k=s.getContext('2d');
+  let gr=k.createLinearGradient(0,0,0,fh*0.62); gr.addColorStop(0,'#c9c9c9'); gr.addColorStop(1,'#f2f2f2');
+  k.fillStyle=gr; k.fillRect(0,0,fw,fh);
+  k.fillStyle='#ffffff'; k.beginPath(); k.arc(fw*0.7,fh*0.3,60,0,7); k.fill();
+  const ridge=(y,amp,col,seed)=>{k.fillStyle=col;k.beginPath();k.moveTo(0,fh);for(let x=0;x<=fw;x+=10){k.lineTo(x,y+Math.sin(x/140+seed)*amp+Math.sin(x/53+seed*2)*amp*0.35);}k.lineTo(fw,fh);k.fill();};
+  ridge(fh*0.5,38,'#8f8f8f',1); ridge(fh*0.58,30,'#6a6a6a',4);
+  gr=k.createLinearGradient(0,fh*0.66,0,fh); gr.addColorStop(0,'#bdbdbd'); gr.addColorStop(1,'#5a5a5a');
+  k.fillStyle=gr; k.fillRect(0,fh*0.66,fw,fh*0.34);
+  k.fillStyle='#e6e6e6'; k.fillRect(fw*0.62,fh*0.68,140,4); k.fillRect(fw*0.64,fh*0.72,100,3);
+  k.fillStyle='#202020'; k.fillRect(fw*0.2,fh*0.38,14,fh*0.5);
+  for(let i=0;i<6;i++){k.beginPath();k.ellipse(fw*0.2+7,fh*0.36+i*28,90-i*12,26,0,0,7);k.fill();}
+  k.fillRect(0,fh*0.88,fw,fh*0.12);
+  const sd=k.getImageData(0,0,fw,fh).data;
+  // película: base clara algo gris, bordes con rotulado
+  const base=[226,222,214];
+  g.fillStyle='#050505'; g.fillRect(0,0,W,H);
+  g.fillStyle=`rgb(${base})`; g.fillRect(0,90,W,H-180);
+  g.fillStyle='#3a3836'; g.font='500 26px "IBM Plex Mono", monospace';
+  g.fillText('▸ 14     HP5 PLUS     15', 120, 132); g.fillText('▸ 14A', W-260, H-102);
+  const out=g.getImageData(fx,fy,fw,fh), d=out.data; let seed=7;
+  const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
+  for(let i=0,p=0;i<sd.length;i+=4,p++){
+    const S=sd[i]/255, D=0.12+1.05*S+(rnd()-0.5)*0.06;
+    const t=Math.pow(10,-D);
+    d[i]=base[0]*t+8; d[i+1]=base[1]*t+8; d[i+2]=base[2]*t+8; d[i+3]=255;
+  }
+  g.putImageData(out,fx,fy);
+  return c;
+}
+
+// ---------- carga y orientación ----------
+function orient(src, maxSide, maxArea){
+  const sw=src.width, sh=src.height, rot=((st.rot%360)+360)%360, side=rot%180!==0;
+  let w=side?sh:sw, h=side?sw:sh, k=Math.min(1, maxSide/Math.max(w,h), Math.sqrt(maxArea/(w*h)));
+  w=Math.round(w*k); h=Math.round(h*k);
+  const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d');
+  g.translate(w/2,h/2); g.rotate(rot*Math.PI/180); if(st.flip) g.scale(-1,1);
+  const dw=Math.round(sw*k), dh=Math.round(sh*k);
+  g.drawImage(src,-dw/2,-dh/2,dw,dh);
+  return c;
+}
+function rebuild(){
+  st.full=orient(st.orig, 6000, 16e6);
+  st.prev=orient(st.orig, 1400, 2e6);
+  st.prevData=st.prev.getContext('2d').getImageData(0,0,st.prev.width,st.prev.height);
+  computeStats(); schedule();
+  $('status').textContent=`${st.full.width} × ${st.full.height} px`;
+}
+
+// ---------- análisis: base de película y niveles ----------
+function pct(h, total, p){ let acc=0, lim=total*p; for(let v=0;v<256;v++){acc+=h[v]; if(acc>=lim) return v;} return 255; }
+function computeStats(){
+  const {data,width:w,height:h}=st.prevData;
+  const hs=[new Float64Array(256),new Float64Array(256),new Float64Array(256),new Float64Array(256)];
+  const x0=Math.floor(w*0.1),x1=Math.ceil(w*0.9),y0=Math.floor(h*0.1),y1=Math.ceil(h*0.9); let n=0;
+  for(let y=y0;y<y1;y+=2) for(let x=x0;x<x1;x+=2){
+    const i=(y*w+x)*4, r=data[i],g=data[i+1],b=data[i+2];
+    hs[0][r]++; hs[1][g]++; hs[2][b]++; hs[3][Math.round(0.2126*r+0.7152*g+0.0722*b)]++; n++;
+  }
+  if(!st.baseManual) st.base=[0,1,2,3].map(c=>Math.max(8,pct(hs[c],n,0.995)));
+  // densidad: claro en el negativo = sombra (D baja); oscuro = luz (D alta)
+  st.stats=[0,1,2,3].map(c=>{
+    const b=st.base[c]/255;
+    const vHi=Math.min(pct(hs[c],n,0.998), st.base[c]), vLo=pct(hs[c],n,0.002);
+    return {b, lo:dens(vHi,b), hi:Math.max(dens(vLo,b), dens(vHi,b)+0.05)};
+  });
+  updateBase();
+}
+const dens=(v,b)=>-Math.log10(Math.max(v,0.5)/255/b);
+
+function adj(){ const o={}; ADJ.forEach(k=>o[k]=+$(k).value); return o; }
+function buildLUTs(){
+  const a=adj(), luts=[new Uint8ClampedArray(256),new Uint8ClampedArray(256),new Uint8ClampedArray(256)];
+  const exp=a.exp/100*0.35, con=a.con/100, gam=Math.pow(2,-a.mid/100*1.2);
+  const shift=[a.temp/100*0.08 - a.tint/100*0.03, a.tint/100*0.06, -a.temp/100*0.08 - a.tint/100*0.03];
+  const chans = st.mode==='bw' ? [3,3,3] : [0,1,2];
+  for(let c=0;c<3;c++){
+    const s=st.stats&&st.stats[chans[c]];
+    for(let v=0;v<256;v++){
+      let x = st.mode==='pos' ? 1-v/255 : (dens(v,s.b)-s.lo)/(s.hi-s.lo);
+      x = x<0?0:x>1?1:x;
+      x = Math.pow(x,gam) + exp;
+      x = (x-0.5)*(1+con)+0.5;
+      if(st.mode==='col') x += shift[c];
+      luts[c][v]=Math.round(x*255);
+    }
+  }
+  return luts;
+}
+function process(srcData, dst){
+  const L=buildLUTs(), s=srcData.data, d=dst.data, bw=st.mode==='bw';
+  for(let i=0;i<s.length;i+=4){
+    if(bw){ const y=L[0][(0.2126*s[i]+0.7152*s[i+1]+0.0722*s[i+2]+0.5)|0]; d[i]=d[i+1]=d[i+2]=y; }
+    else { d[i]=L[0][s[i]]; d[i+1]=L[1][s[i+1]]; d[i+2]=L[2][s[i+2]]; }
+    d[i+3]=255;
+  }
+  return dst;
+}
+function cropRect(w,h){ const c=+$('crop').value/100; const cx=Math.round(w*c), cy=Math.round(h*c); return {x:cx,y:cy,w:w-2*cx,h:h-2*cy}; }
+
+// ---------- dibujo ----------
+function render(){
+  st.queued=false;
+  const {width:w,height:h}=st.prevData, r=cropRect(w,h);
+  view.width=r.w; view.height=r.h;
+  if(st.showOrig){ vctx.putImageData(st.prevData,-r.x,-r.y,r.x,r.y,r.w,r.h); }
+  else {
+    const out=process(st.prevData, new ImageData(w,h));
+    vctx.putImageData(out,-r.x,-r.y,r.x,r.y,r.w,r.h);
+  }
+  $('tag').textContent = st.showOrig ? 'Original' : (st.mode==='pos' ? 'Negativo' : 'Positivo');
+}
+function schedule(){ if(!st.queued){ st.queued=true; requestAnimationFrame(()=>{ try{render();}catch(e){ st.queued=false; $('status').textContent='Error: '+e.message; } }); } }
+
+function updateBase(){
+  const b=st.base, isPos=st.mode==='pos';
+  $('baseField').hidden=isPos;
+  if(!b) return;
+  $('swatch').style.background = st.mode==='bw' ? `rgb(${b[3]},${b[3]},${b[3]})` : `rgb(${b[0]},${b[1]},${b[2]})`;
+  $('baseTxt').textContent = st.baseManual ? 'Tomada del borde' : 'Automática';
+}
+
+// ---------- controles ----------
+$('open').onclick=()=>$('file').click();
+$('file').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  $('status').textContent='Abriendo…';
+  try{
+    let img;
+    try{ img=await createImageBitmap(f,{imageOrientation:'from-image'}); }
+    catch(_){ img=await new Promise((res,rej)=>{const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(f);}); }
+    st.orig=img; st.sample=false; st.rot=0; st.flip=false; st.baseManual=false; $('result').hidden=true;
+    rebuild();
+  }catch(err){ $('status').textContent='No se pudo abrir el archivo. Prueba con JPG o PNG.'; }
+};
+document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=()=>{
+  st.mode=r.value;
+  document.querySelectorAll('[data-color]').forEach(el=>el.hidden=st.mode!=='col');
+  computeStats(); schedule(); $('result').hidden=true;
+});
+$('rotL').onclick=()=>{st.rot-=90; rebuild();};
+$('rotR').onclick=()=>{st.rot+=90; rebuild();};
+$('flip').onclick=()=>{st.flip=!st.flip; $('flip').classList.toggle('on',st.flip); rebuild();};
+ADJ.forEach(k=>$(k).oninput=()=>{ const v=+$(k).value; $(k+'-o').textContent = k==='crop' ? v+' %' : (v>0?'+':'')+v; schedule(); });
+$('reset').onclick=()=>{ ADJ.forEach(k=>{ $(k).value=0; $(k+'-o').textContent = k==='crop'?'0 %':'0'; }); schedule(); };
+$('autoBase').onclick=()=>{ st.baseManual=false; st.picking=false; $('pick').classList.remove('on'); view.classList.remove('picking'); computeStats(); schedule(); };
+$('pick').onclick=()=>{ st.picking=!st.picking; $('pick').classList.toggle('on',st.picking); view.classList.toggle('picking',st.picking);
+  $('status').textContent = st.picking ? 'Toca el borde de la película en la imagen' : ''; if(st.picking && !st.showOrig){ st.showOrig=true; schedule(); } if(!st.picking){ st.showOrig=false; schedule(); } };
+view.addEventListener('click',e=>{
+  if(!st.picking) return;
+  const rect=view.getBoundingClientRect(), {width:w,height:h,data}=st.prevData, r=cropRect(w,h);
+  const px=Math.round(r.x+(e.clientX-rect.left)/rect.width*r.w), py=Math.round(r.y+(e.clientY-rect.top)/rect.height*r.h);
+  const acc=[0,0,0]; let n=0;
+  for(let y=py-4;y<=py+4;y++) for(let x=px-4;x<=px+4;x++){ if(x<0||y<0||x>=w||y>=h) continue; const i=(y*w+x)*4; acc[0]+=data[i];acc[1]+=data[i+1];acc[2]+=data[i+2];n++; }
+  const b=acc.map(v=>Math.max(8,Math.round(v/n)));
+  st.base=[b[0],b[1],b[2],Math.round(0.2126*b[0]+0.7152*b[1]+0.0722*b[2])];
+  st.baseManual=true; st.picking=false; st.showOrig=false;
+  $('pick').classList.remove('on'); view.classList.remove('picking'); $('status').textContent='Base de la película fijada';
+  computeStats(); schedule();
+});
+const cmp=$('compare');
+const holdOn=e=>{ e.preventDefault(); st.showOrig=true; schedule(); }, holdOff=()=>{ if(st.picking) return; st.showOrig=false; schedule(); };
+cmp.addEventListener('pointerdown',holdOn); cmp.addEventListener('pointerup',holdOff); cmp.addEventListener('pointerleave',holdOff); cmp.addEventListener('pointercancel',holdOff);
+cmp.addEventListener('keydown',e=>{ if(e.key===' '||e.key==='Enter'){ holdOn(e); } }); cmp.addEventListener('keyup',holdOff);
+
+$('export').onclick=()=>{
+  $('status').textContent='Preparando…';
+  setTimeout(()=>{
+    try{
+      const f=st.full, w=f.width, h=f.height, src=f.getContext('2d').getImageData(0,0,w,h);
+      const out=process(src, src);
+      const r=cropRect(w,h), c=document.createElement('canvas'); c.width=r.w; c.height=r.h;
+      c.getContext('2d').putImageData(out,-r.x,-r.y,r.x,r.y,r.w,r.h);
+      $('final').src=c.toDataURL('image/jpeg',0.93);
+      $('result').hidden=false; $('status').textContent=`Lista · ${r.w} × ${r.h} px`;
+      $('result').scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth', block:'nearest'});
+    }catch(err){ $('status').textContent='No se pudo preparar: '+err.message; }
+  },30);
+};
+
+// ---------- inicio ----------
+document.querySelectorAll('[data-color]').forEach(el=>el.hidden=true);
+(document.fonts ? Promise.race([document.fonts.load('500 20px "IBM Plex Mono"'), new Promise(r=>setTimeout(r,1500))]) : Promise.resolve())
+  .catch(()=>{}).then(()=>{ st.orig=makeSample(); rebuild(); $('status').textContent='Ejemplo · negativo B/N'; });
+</script>
+</body>
+</html>
